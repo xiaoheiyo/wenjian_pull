@@ -1,8 +1,9 @@
-# 文件目录浏览与同步服务
+v# 文件目录浏览与同步服务
 
 基于 Node.js 的轻量级文件服务器，支持目录浏览、文件上传/删除、外链同步。
 
-![123][123]
+<img width="541" height="287" alt="1780487035195_capture_result" src="https://github.com/user-attachments/assets/b88ce417-cd00-4876-a60b-16c4e22d71e0" />
+
 
 ## 快速开始
 
