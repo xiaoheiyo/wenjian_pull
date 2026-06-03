@@ -85,7 +85,8 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
             items += '<div class="sync-item"><span class="sync-url">' + escapeHtml(b.url) + '</span> → ' +
                 (exists ? '<a href="' + href + '" class="sync-link">' + escapeHtml(b.localPath) + '</a>' : '<span class="sync-missing">' + escapeHtml(b.localPath) + '（未同步）</span>') +
                 (!exists ? '<button class="sync-item-btn" data-idx="' + si + '">同步</button>' : '') +
-                '<button class="sync-copy" data-url="' + escapeHtml(b.url) + '">📋</button></div>';
+                '<button class="sync-copy-path" data-path="' + href + '" title="复制下载链接">📁</button>' +
+                '<button class="sync-copy" data-url="' + escapeHtml(b.url) + '" title="复制源 URL">📋</button></div>';
         }
         syncSection = '<div class="sync-section">' + items + '</div>';
     }
@@ -187,8 +188,9 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
         .sync-link { color: #059669; font-weight: 500; text-decoration: none; }
         .sync-link:hover { text-decoration: underline; }
         .sync-missing { color: #94a3b8; font-style: italic; }
-        .sync-copy { background: none; border: none; cursor: pointer; font-size: 0.9rem; padding: 0 4px; opacity: 0.4; margin-left: auto; transition: 0.2s; }
-        .sync-copy:hover { opacity: 1; }
+        .sync-copy, .sync-copy-path { background: none; border: none; cursor: pointer; font-size: 0.9rem; padding: 0 4px; opacity: 0.4; transition: 0.2s; }
+        .sync-copy { margin-left: auto; }
+        .sync-copy:hover, .sync-copy-path:hover { opacity: 1; }
         .sync-item-btn { background: #059669; color: white; border: none; border-radius: 6px; padding: 2px 10px; cursor: pointer; font-size: 0.8rem; margin-left: 4px; }
         .sync-item-btn:hover { background: #047857; }
         .footer-note { margin-top: 28px; font-size: 0.75rem; text-align: center; color: #6c86a3; border-top: 1px solid #e2e8f0; padding-top: 18px; }
@@ -479,7 +481,8 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                         var href = '/' + encodeURIComponent(fp);
                         html += '<div class="sync-item"><span class="sync-url">' + escapeHtml(b.url) + '</span> → ' +
                             '<a href="' + href + '" class="sync-link">' + escapeHtml(b.localPath) + '</a>' +
-                            '<button class="sync-copy" data-url="' + escapeHtml(b.url) + '">📋</button></div>';
+                            '<button class="sync-copy-path" data-path="' + href + '" title="复制下载链接">📁</button>' +
+                            '<button class="sync-copy" data-url="' + escapeHtml(b.url) + '" title="复制源 URL">📋</button></div>';
                     }
                     var el = document.querySelector('.sync-section');
                     if (el) el.innerHTML = html;
@@ -499,6 +502,13 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                             e.preventDefault();
                             var url = this.getAttribute('data-url');
                             if (url) copyToClipboard(url);
+                        };
+                    });
+                    document.querySelectorAll('.sync-copy-path').forEach(function(btn) {
+                        btn.onclick = function(e) {
+                            e.preventDefault();
+                            var p = this.getAttribute('data-path');
+                            if (p) copyToClipboard(window.location.origin + p);
                         };
                     });
                 });
@@ -524,6 +534,13 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                         e.preventDefault();
                         var url = this.getAttribute('data-url');
                         if (url) copyToClipboard(url);
+                    });
+                });
+                document.querySelectorAll('.sync-copy-path').forEach(function(btn) {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        var p = this.getAttribute('data-path');
+                        if (p) copyToClipboard(window.location.origin + p);
                     });
                 });
                 document.querySelectorAll('.sync-item-btn').forEach(function(btn) {
