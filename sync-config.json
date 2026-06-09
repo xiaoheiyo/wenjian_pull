@@ -1,0 +1,10 @@
+{
+  "bindings": [
+    {
+      "url": "https://node.freeclash.net/uploads/{YYYY}/{MM}/0-{YYYY}{MM}{DD}.yaml",
+      "localPath": "data/1.yaml",
+      "isRegex": true,
+      "updatedAt": 1780976545029
+    }
+  ]
+}

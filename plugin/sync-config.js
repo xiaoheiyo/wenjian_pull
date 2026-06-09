@@ -18,9 +18,9 @@ function save(data) {
 
 function getBindings() { return load().bindings; }
 
-function addBinding(url, localPath) {
+function addBinding(url, localPath, isRegex) {
     const config = load();
-    config.bindings.push({ url, localPath, createdAt: Date.now() });
+    config.bindings.push({ url, localPath, isRegex: !!isRegex, createdAt: Date.now() });
     save(config);
     return config.bindings;
 }
@@ -34,10 +34,10 @@ function removeBinding(index) {
     return config.bindings;
 }
 
-function updateBinding(index, url, localPath) {
+function updateBinding(index, url, localPath, isRegex) {
     const config = load();
     if (index >= 0 && index < config.bindings.length) {
-        config.bindings[index] = { url, localPath, updatedAt: Date.now() };
+        config.bindings[index] = { url, localPath, isRegex: !!isRegex, updatedAt: Date.now() };
         save(config);
     }
     return config.bindings;
