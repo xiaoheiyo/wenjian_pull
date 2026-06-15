@@ -82,7 +82,11 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
             const b = syncBindings[si];
             const displayUrl = substituteDate(b.url);
             let modeBadge = '';
-            if (b.syncMode === 'interval') modeBadge = '<span class="sync-badge" style="background:#6366f1">每' + (b.intervalMinutes || 60) + '分</span>';
+            if (b.syncMode === 'interval') {
+                var ival = b.intervalValue || b.intervalMinutes || 1;
+                var iunitMap = { minutes:'分', hours:'时', days:'天', weeks:'周', months:'月' };
+                modeBadge = '<span class="sync-badge" style="background:#6366f1">每' + ival + (iunitMap[b.intervalUnit] || '分') + '</span>';
+            }
             else if (b.syncMode === 'scheduled') modeBadge = '<span class="sync-badge" style="background:#6366f1">' + (b.scheduledTime || '08:00') + '</span>';
             if (b.isRegex) {
                 const displayPath = substituteDate(b.localPath);
@@ -389,7 +393,12 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
 
             function syncModeLabel(item) {
                 var mode = item.syncMode || 'manual';
-                if (mode === 'interval') return '<span style="font-size:0.7rem;background:#6366f1;color:#fff;padding:1px 5px;border-radius:3px;margin-right:4px">每' + (item.intervalMinutes || 60) + '分</span>';
+                if (mode === 'interval') {
+                    var val = item.intervalValue || item.intervalMinutes || 1;
+                    var unitNames = { minutes: '分', hours: '时', days: '天', weeks: '周', months: '月' };
+                    var u = unitNames[item.intervalUnit] || '分';
+                    return '<span style="font-size:0.7rem;background:#6366f1;color:#fff;padding:1px 5px;border-radius:3px;margin-right:4px">每' + val + u + '</span>';
+                }
                 if (mode === 'scheduled') return '<span style="font-size:0.7rem;background:#6366f1;color:#fff;padding:1px 5px;border-radius:3px;margin-right:4px">' + (item.scheduledTime || '08:00') + '</span>';
                 return '';
             }
@@ -431,9 +440,12 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
             function setSyncModeFields(item) {
                 var mode = item.syncMode || 'manual';
                 document.getElementById('syncMode').value = mode;
-                document.getElementById('syncIntervalMinutes').value = item.intervalMinutes || 60;
+                document.getElementById('syncIntervalValue').value = item.intervalValue || (item.intervalMinutes ? item.intervalMinutes : 1);
+                var unit = item.intervalUnit || (item.intervalMinutes ? 'minutes' : 'minutes');
+                document.getElementById('syncIntervalUnit').value = unit;
                 document.getElementById('syncScheduledTime').value = item.scheduledTime || '08:00';
-                document.getElementById('syncIntervalMinutes').style.display = mode === 'interval' ? '' : 'none';
+                document.getElementById('syncIntervalValue').style.display = mode === 'interval' ? '' : 'none';
+                document.getElementById('syncIntervalUnit').style.display = mode === 'interval' ? '' : 'none';
                 document.getElementById('syncScheduledTime').style.display = mode === 'scheduled' ? '' : 'none';
             }
 
@@ -458,7 +470,10 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
             function getSyncModeFields() {
                 var mode = document.getElementById('syncMode').value;
                 var fields = { syncMode: mode };
-                if (mode === 'interval') fields.intervalMinutes = parseInt(document.getElementById('syncIntervalMinutes').value) || 60;
+                if (mode === 'interval') {
+                    fields.intervalValue = parseInt(document.getElementById('syncIntervalValue').value) || 1;
+                    fields.intervalUnit = document.getElementById('syncIntervalUnit').value;
+                }
                 if (mode === 'scheduled') fields.scheduledTime = document.getElementById('syncScheduledTime').value || '08:00';
                 return fields;
             }
@@ -475,7 +490,8 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                     document.getElementById('syncPath').value = '';
                     document.getElementById('syncIsRegex').checked = false;
                     document.getElementById('syncMode').value = 'manual';
-                    document.getElementById('syncIntervalMinutes').style.display = 'none';
+                    document.getElementById('syncIntervalValue').style.display = 'none';
+                    document.getElementById('syncIntervalUnit').style.display = 'none';
                     document.getElementById('syncScheduledTime').style.display = 'none';
                     editIndex = null;
                     document.querySelector('.btn-add').textContent = '添加';
@@ -484,11 +500,11 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                 };
 
                 if (editIndex !== null) {
-                    ajax('PUT', '/api/sync/config', JSON.stringify({ index: editIndex, url: url, localPath: localPath, isRegex: isRegex, syncMode: sm.syncMode, intervalMinutes: sm.intervalMinutes, scheduledTime: sm.scheduledTime }), function(xhr) {
+                    ajax('PUT', '/api/sync/config', JSON.stringify({ index: editIndex, url: url, localPath: localPath, isRegex: isRegex, syncMode: sm.syncMode, intervalValue: sm.intervalValue, intervalUnit: sm.intervalUnit, scheduledTime: sm.scheduledTime }), function(xhr) {
                         if (xhr.status === 200) { ok(); showToast('✅ 已更新'); }
                     });
                 } else {
-                    ajax('POST', '/api/sync/config', JSON.stringify({ url: url, localPath: localPath, isRegex: isRegex, syncMode: sm.syncMode, intervalMinutes: sm.intervalMinutes, scheduledTime: sm.scheduledTime }), function(xhr) {
+                    ajax('POST', '/api/sync/config', JSON.stringify({ url: url, localPath: localPath, isRegex: isRegex, syncMode: sm.syncMode, intervalValue: sm.intervalValue, intervalUnit: sm.intervalUnit, scheduledTime: sm.scheduledTime }), function(xhr) {
                         if (xhr.status === 200) { ok(); showToast('✅ 已添加'); }
                     });
                 }
@@ -582,7 +598,7 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                     for (var i = 0; i < list.length; i++) {
                         var b = list[i];
                         var displayUrl = substituteDate(b.url);
-                        var modeLabel = b.syncMode === 'interval' ? ' <span class="sync-badge" style="background:#6366f1">每' + (b.intervalMinutes || 60) + '分</span>' : (b.syncMode === 'scheduled' ? ' <span class="sync-badge" style="background:#6366f1">' + (b.scheduledTime || '08:00') + '</span>' : '');
+                        var modeLabel = b.syncMode === 'interval' ? ' <span class="sync-badge" style="background:#6366f1">每' + (b.intervalValue || b.intervalMinutes || 1) + ({minutes:'分',hours:'时',days:'天',weeks:'周',months:'月'}[b.intervalUnit] || '分') + '</span>' : (b.syncMode === 'scheduled' ? ' <span class="sync-badge" style="background:#6366f1">' + (b.scheduledTime || '08:00') + '</span>' : '');
                         if (b.isRegex) {
                             var displayPath = substituteDate(b.localPath);
                             html += '<div class="sync-item sync-regex"><span class="sync-badge" style="background:#f59e0b">🔀 正则</span>' + modeLabel + '<span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → <span class="sync-link" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(displayPath) + '</span>' +
@@ -703,7 +719,8 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                 var smSelect = document.getElementById('syncMode');
                 if (smSelect) smSelect.onchange = function() {
                     var v = this.value;
-                    document.getElementById('syncIntervalMinutes').style.display = v === 'interval' ? '' : 'none';
+                    document.getElementById('syncIntervalValue').style.display = v === 'interval' ? '' : 'none';
+                    document.getElementById('syncIntervalUnit').style.display = v === 'interval' ? '' : 'none';
                     document.getElementById('syncScheduledTime').style.display = v === 'scheduled' ? '' : 'none';
                 };
             });
@@ -750,11 +767,18 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
         <div class="form-row" style="gap:8px;align-items:center;flex-wrap:wrap">
             <label style="font-size:0.85rem;white-space:nowrap">同步方式：</label>
             <select id="syncMode" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;flex:1;min-width:100px">
-                <option value="manual">手动</option>
-                <option value="interval">间隔（分钟）</option>
+                <option value="manual"> 手动 </option>
+                <option value="interval"> 间隔 </option>
                 <option value="scheduled">定时（每日）</option>
             </select>
-            <input id="syncIntervalMinutes" type="number" min="1" value="60" style="width:70px;display:none;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem">
+            <input id="syncIntervalValue" type="number" min="1" value="1" style="width:60px;display:none;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem">
+            <select id="syncIntervalUnit" style="display:none;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem">
+                <option value="minutes">分钟</option>
+                <option value="hours">小时</option>
+                <option value="days">天</option>
+                <option value="weeks">周</option>
+                <option value="months">月</option>
+            </select>
             <input id="syncScheduledTime" type="time" value="08:00" style="display:none;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem">
         </div>
         <ul id="bindingList" class="binding-list"><li style="color:#94a3b8;text-align:center;justify-content:center">暂无绑定</li></ul>

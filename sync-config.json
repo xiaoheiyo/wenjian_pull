@@ -4,7 +4,7 @@
       "url": "https://node.freeclash.net/uploads/{YYYY}/{MM}/0-{YYYY}{MM}{DD}.yaml",
       "localPath": "data/1.yaml",
       "isRegex": true,
-      "updatedAt": 1781529476037,
+      "updatedAt": 1781530471193,
       "syncMode": "scheduled",
       "scheduledTime": "01:00"
     }

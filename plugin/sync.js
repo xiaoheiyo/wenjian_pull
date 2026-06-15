@@ -141,6 +141,22 @@ function getTodayStr() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+const INTERVAL_UNIT_MS = { minutes: 60000, hours: 3600000, days: 86400000, weeks: 604800000, months: 2592000000 };
+
+function getIntervalMs(b) {
+    if (b.intervalMinutes) return b.intervalMinutes * 60000;
+    const val = b.intervalValue || 1;
+    const unit = b.intervalUnit || 'minutes';
+    return val * (INTERVAL_UNIT_MS[unit] || 60000);
+}
+
+function intervalLabel(b) {
+    if (b.intervalMinutes) return '每' + b.intervalMinutes + '分';
+    const val = b.intervalValue || 1;
+    const unitNames = { minutes: '分', hours: '时', days: '天', weeks: '周', months: '月' };
+    return '每' + val + (unitNames[b.intervalUnit] || '分');
+}
+
 async function checkAndSync() {
     const list = syncConfig.getBindings();
     const now = Date.now();
@@ -152,7 +168,7 @@ async function checkAndSync() {
         const key = i + '';
         let shouldSync = false;
         if (mode === 'interval') {
-            const interval = (b.intervalMinutes || 60) * 60000;
+            const interval = getIntervalMs(b);
             const last = autoSyncState.lastSync[key] || 0;
             if (now - last >= interval) shouldSync = true;
         } else if (mode === 'scheduled') {
@@ -201,9 +217,9 @@ router.register('POST', '/api/sync/config', (req, res, ctx) => {
     req.on('data', c => body += c);
     req.on('end', () => {
         try {
-            const { url, localPath, isRegex, syncMode, intervalMinutes, scheduledTime } = JSON.parse(body);
+            const { url, localPath, isRegex, syncMode, intervalValue, intervalUnit, scheduledTime } = JSON.parse(body);
             res.writeHead(200, { ...ctx.sec, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(syncConfig.addBinding(url, localPath, !!isRegex, syncMode, intervalMinutes, scheduledTime)));
+            res.end(JSON.stringify(syncConfig.addBinding(url, localPath, !!isRegex, syncMode, intervalValue, intervalUnit, scheduledTime)));
         } catch (e) {
             res.writeHead(400, { ...ctx.sec, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: '请求格式错误' }));
@@ -216,9 +232,9 @@ router.register('PUT', '/api/sync/config', (req, res, ctx) => {
     req.on('data', c => body += c);
     req.on('end', () => {
         try {
-            const { index, url, localPath, isRegex, syncMode, intervalMinutes, scheduledTime } = JSON.parse(body);
+            const { index, url, localPath, isRegex, syncMode, intervalValue, intervalUnit, scheduledTime } = JSON.parse(body);
             res.writeHead(200, { ...ctx.sec, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(syncConfig.updateBinding(index, url, localPath, !!isRegex, syncMode, intervalMinutes, scheduledTime)));
+            res.end(JSON.stringify(syncConfig.updateBinding(index, url, localPath, !!isRegex, syncMode, intervalValue, intervalUnit, scheduledTime)));
         } catch (e) {
             res.writeHead(400, { ...ctx.sec, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: '请求格式错误' }));
