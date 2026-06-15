@@ -18,9 +18,15 @@ function save(data) {
 
 function getBindings() { return load().bindings; }
 
-function addBinding(url, localPath, isRegex) {
+function addBinding(url, localPath, isRegex, syncMode, intervalMinutes, scheduledTime) {
     const config = load();
-    config.bindings.push({ url, localPath, isRegex: !!isRegex, createdAt: Date.now() });
+    const binding = { url, localPath, isRegex: !!isRegex, createdAt: Date.now() };
+    if (syncMode && syncMode !== 'manual') {
+        binding.syncMode = syncMode;
+        if (syncMode === 'interval') binding.intervalMinutes = intervalMinutes || 60;
+        if (syncMode === 'scheduled') binding.scheduledTime = scheduledTime || '08:00';
+    }
+    config.bindings.push(binding);
     save(config);
     return config.bindings;
 }
@@ -34,10 +40,16 @@ function removeBinding(index) {
     return config.bindings;
 }
 
-function updateBinding(index, url, localPath, isRegex) {
+function updateBinding(index, url, localPath, isRegex, syncMode, intervalMinutes, scheduledTime) {
     const config = load();
     if (index >= 0 && index < config.bindings.length) {
-        config.bindings[index] = { url, localPath, isRegex: !!isRegex, updatedAt: Date.now() };
+        const binding = { url, localPath, isRegex: !!isRegex, updatedAt: Date.now() };
+        if (syncMode && syncMode !== 'manual') {
+            binding.syncMode = syncMode;
+            if (syncMode === 'interval') binding.intervalMinutes = intervalMinutes || 60;
+            if (syncMode === 'scheduled') binding.scheduledTime = scheduledTime || '08:00';
+        }
+        config.bindings[index] = binding;
         save(config);
     }
     return config.bindings;

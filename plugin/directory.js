@@ -81,16 +81,19 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
         for (let si = 0; si < syncBindings.length; si++) {
             const b = syncBindings[si];
             const displayUrl = substituteDate(b.url);
+            let modeBadge = '';
+            if (b.syncMode === 'interval') modeBadge = '<span class="sync-badge" style="background:#6366f1">每' + (b.intervalMinutes || 60) + '分</span>';
+            else if (b.syncMode === 'scheduled') modeBadge = '<span class="sync-badge" style="background:#6366f1">' + (b.scheduledTime || '08:00') + '</span>';
             if (b.isRegex) {
                 const displayPath = substituteDate(b.localPath);
-                items += '<div class="sync-item sync-regex"><span class="sync-badge">🔀 正则</span><span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → <span class="sync-link" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(displayPath) + '</span>' +
+                items += '<div class="sync-item sync-regex"><span class="sync-badge" style="background:#f59e0b">🔀 正则</span>' + modeBadge + '<span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → <span class="sync-link" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(displayPath) + '</span>' +
                     '<button class="sync-item-btn" data-idx="' + si + '" title="同步所有匹配文件">同步全部</button>' +
                     '<button class="sync-copy" data-url="' + escapeHtml(displayUrl) + '" title="复制源 URL">📋</button></div>';
             } else {
                 const filePath = substituteDate(b.localPath).replace(/^\//, '');
                 const href = '/' + encodePath(filePath);
                 const exists = fs.existsSync(path.join(baseDir, filePath));
-                items += '<div class="sync-item"><span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → ' +
+                items += '<div class="sync-item">' + modeBadge + '<span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → ' +
                     (exists ? '<a href="' + href + '" class="sync-link" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(filePath) + '</a>' : '<span class="sync-missing" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(filePath) + '（未同步）</span>') +
                     (!exists ? '<button class="sync-item-btn" data-idx="' + si + '">同步</button>' : '') +
                     '<button class="sync-copy-path" data-path="' + href + '" title="复制下载链接">📁</button>' +
@@ -383,17 +386,13 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
             });
 
             var editIndex = null;
-            var syncTimer = null;
 
-            function getSyncInterval() { var v = localStorage.getItem('sync_interval'); return v ? parseInt(v) : 0; }
-            function setSyncInterval(m) { if (m > 0) localStorage.setItem('sync_interval', m); else localStorage.removeItem('sync_interval'); }
-
-            function startSyncTimer() {
-                stopSyncTimer();
-                var m = getSyncInterval();
-                if (m > 0) syncTimer = setInterval(syncAll, m * 60 * 1000);
+            function syncModeLabel(item) {
+                var mode = item.syncMode || 'manual';
+                if (mode === 'interval') return '<span style="font-size:0.7rem;background:#6366f1;color:#fff;padding:1px 5px;border-radius:3px;margin-right:4px">每' + (item.intervalMinutes || 60) + '分</span>';
+                if (mode === 'scheduled') return '<span style="font-size:0.7rem;background:#6366f1;color:#fff;padding:1px 5px;border-radius:3px;margin-right:4px">' + (item.scheduledTime || '08:00') + '</span>';
+                return '';
             }
-            function stopSyncTimer() { if (syncTimer) { clearInterval(syncTimer); syncTimer = null; } }
 
             function loadBindings() {
                 ajax('GET', '/api/sync/config', null, function(xhr) {
@@ -410,10 +409,11 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                                 (function(idx) {
                                     var item = list[idx];
                                     var regexTag = item.isRegex ? '<span style="font-size:0.7rem;background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;margin-right:4px">正则</span>' : '';
+                                    var smLabel = syncModeLabel(item);
                                     var displayUrl = substituteDate(item.url);
                                     var displayPath = substituteDate(item.localPath);
                                     var li = document.createElement('li');
-                                    li.innerHTML = '<div class="info"><div class="url" title="' + escapeHtml(item.url) + '">' + regexTag + escapeHtml(displayUrl) + '</div><div class="path" title="' + escapeHtml(item.localPath) + '">→ ' + escapeHtml(displayPath) + '</div></div>' +
+                                    li.innerHTML = '<div class="info"><div class="url" title="' + escapeHtml(item.url) + '">' + regexTag + smLabel + escapeHtml(displayUrl) + '</div><div class="path" title="' + escapeHtml(item.localPath) + '">→ ' + escapeHtml(displayPath) + '</div></div>' +
                                         '<button class="btn-edit" id="editBtn' + idx + '">✏️</button>' +
                                         '<button class="btn-sync-one" id="syncBtn' + idx + '">同步</button>' +
                                         '<button class="btn-remove" id="rmBtn' + idx + '">✕</button>';
@@ -428,6 +428,15 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                 });
             }
 
+            function setSyncModeFields(item) {
+                var mode = item.syncMode || 'manual';
+                document.getElementById('syncMode').value = mode;
+                document.getElementById('syncIntervalMinutes').value = item.intervalMinutes || 60;
+                document.getElementById('syncScheduledTime').value = item.scheduledTime || '08:00';
+                document.getElementById('syncIntervalMinutes').style.display = mode === 'interval' ? '' : 'none';
+                document.getElementById('syncScheduledTime').style.display = mode === 'scheduled' ? '' : 'none';
+            }
+
             function editBinding(idx) {
                 ajax('GET', '/api/sync/config', null, function(xhr) {
                     if (xhr.status === 200) {
@@ -437,6 +446,7 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                             document.getElementById('syncUrl').value = item.url;
                             document.getElementById('syncPath').value = item.localPath;
                             document.getElementById('syncIsRegex').checked = !!item.isRegex;
+                            setSyncModeFields(item);
                             editIndex = idx;
                             document.querySelector('.btn-add').textContent = '更新';
                             toggleRegexHint();
@@ -445,16 +455,28 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                 });
             }
 
+            function getSyncModeFields() {
+                var mode = document.getElementById('syncMode').value;
+                var fields = { syncMode: mode };
+                if (mode === 'interval') fields.intervalMinutes = parseInt(document.getElementById('syncIntervalMinutes').value) || 60;
+                if (mode === 'scheduled') fields.scheduledTime = document.getElementById('syncScheduledTime').value || '08:00';
+                return fields;
+            }
+
             function addBinding() {
                 var url = document.getElementById('syncUrl').value.trim();
                 var localPath = document.getElementById('syncPath').value.trim();
                 if (!url || !localPath) { showToast('请填写 URL 和本地路径'); return; }
                 var isRegex = document.getElementById('syncIsRegex').checked;
+                var sm = getSyncModeFields();
 
                 var ok = function() {
                     document.getElementById('syncUrl').value = '';
                     document.getElementById('syncPath').value = '';
                     document.getElementById('syncIsRegex').checked = false;
+                    document.getElementById('syncMode').value = 'manual';
+                    document.getElementById('syncIntervalMinutes').style.display = 'none';
+                    document.getElementById('syncScheduledTime').style.display = 'none';
                     editIndex = null;
                     document.querySelector('.btn-add').textContent = '添加';
                     toggleRegexHint();
@@ -462,11 +484,11 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                 };
 
                 if (editIndex !== null) {
-                    ajax('PUT', '/api/sync/config', JSON.stringify({ index: editIndex, url: url, localPath: localPath, isRegex: isRegex }), function(xhr) {
+                    ajax('PUT', '/api/sync/config', JSON.stringify({ index: editIndex, url: url, localPath: localPath, isRegex: isRegex, syncMode: sm.syncMode, intervalMinutes: sm.intervalMinutes, scheduledTime: sm.scheduledTime }), function(xhr) {
                         if (xhr.status === 200) { ok(); showToast('✅ 已更新'); }
                     });
                 } else {
-                    ajax('POST', '/api/sync/config', JSON.stringify({ url: url, localPath: localPath, isRegex: isRegex }), function(xhr) {
+                    ajax('POST', '/api/sync/config', JSON.stringify({ url: url, localPath: localPath, isRegex: isRegex, syncMode: sm.syncMode, intervalMinutes: sm.intervalMinutes, scheduledTime: sm.scheduledTime }), function(xhr) {
                         if (xhr.status === 200) { ok(); showToast('✅ 已添加'); }
                     });
                 }
@@ -486,30 +508,16 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
 
             function runRegexTest() {
                 var url = document.getElementById('testUrl').value.trim();
-                var path = document.getElementById('testPath').value.trim();
-                if (!url || !path) { showToast('请填写 URL 和本地路径'); return; }
-                var isRegex = document.getElementById('testIsRegex').checked;
+                if (!url) { showToast('请填写 URL'); return; }
                 document.getElementById('testResults').style.display = 'block';
                 document.getElementById('testResultList').innerHTML = '<div class="test-empty">⏳ 测试中...</div>';
-                ajax('POST', '/api/sync/test', JSON.stringify({ url: url, localPath: path, isRegex: isRegex }), function(xhr) {
+                ajax('POST', '/api/sync/test', JSON.stringify({ url: url }), function(xhr) {
                     if (xhr.status === 200) {
                         try {
                             var data = JSON.parse(xhr.responseText);
                             var html = '<div class="test-result-item" style="background:#f0fdf4;border-color:#86efac">' +
                                 '<div class="test-url">🔗 ' + escapeHtml(data.resolvedUrl) + '</div>' +
-                                '<div class="test-path">📄 ' + escapeHtml(data.resolvedPath) + '</div>' +
                                 '</div>';
-                            if (data.matches && data.matches.length > 0) {
-                                html += '<h3 style="font-size:0.85rem;margin:8px 0 4px;color:#4b5563">匹配文件 (' + data.matches.length + '):</h3>';
-                                for (var i = 0; i < data.matches.length; i++) {
-                                    html += '<div class="test-result-item">' +
-                                        '<div class="test-url">🔗 ' + escapeHtml(data.matches[i].url) + '</div>' +
-                                        '<div class="test-path">📄 ' + escapeHtml(data.matches[i].localPath) + '</div>' +
-                                        '</div>';
-                                }
-                            } else if (data.isRegex) {
-                                html += '<div class="test-empty">磁盘上无匹配文件</div>';
-                            }
                             document.getElementById('testResultList').innerHTML = html;
                         } catch(e) {
                             document.getElementById('testResultList').innerHTML = '<div class="test-empty">❌ 解析结果失败: ' + e.message + '</div>';
@@ -526,6 +534,7 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                         try {
                             var r = JSON.parse(xhr.responseText);
                             if (Array.isArray(r)) {
+                                if (r.length === 0) { showToast('⚠️ 本地无匹配文件'); return; }
                                 var ok = 0, fail = 0, firstErr = '';
                                 for (var i = 0; i < r.length; i++) {
                                     if (r[i].success) ok++;
@@ -548,6 +557,7 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                     if (xhr.status === 200) {
                         try {
                             var results = JSON.parse(xhr.responseText);
+                            if (results.length === 0) { showToast('⚠️ 本地无匹配文件'); return; }
                             var ok = 0, fail = 0, firstErr = '';
                             for (var i = 0; i < results.length; i++) {
                                 if (results[i].success) ok++;
@@ -572,15 +582,16 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                     for (var i = 0; i < list.length; i++) {
                         var b = list[i];
                         var displayUrl = substituteDate(b.url);
+                        var modeLabel = b.syncMode === 'interval' ? ' <span class="sync-badge" style="background:#6366f1">每' + (b.intervalMinutes || 60) + '分</span>' : (b.syncMode === 'scheduled' ? ' <span class="sync-badge" style="background:#6366f1">' + (b.scheduledTime || '08:00') + '</span>' : '');
                         if (b.isRegex) {
                             var displayPath = substituteDate(b.localPath);
-                            html += '<div class="sync-item sync-regex"><span class="sync-badge">🔀 正则</span><span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → <span class="sync-link" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(displayPath) + '</span>' +
+                            html += '<div class="sync-item sync-regex"><span class="sync-badge" style="background:#f59e0b">🔀 正则</span>' + modeLabel + '<span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → <span class="sync-link" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(displayPath) + '</span>' +
                                 '<button class="sync-item-btn" data-idx="' + i + '" title="同步所有匹配文件">同步全部</button>' +
                                 '<button class="sync-copy" data-url="' + escapeHtml(displayUrl) + '" title="复制源 URL">📋</button></div>';
                         } else {
                             var fp = substituteDate(b.localPath || '').replace(/^\\//, '');
                             var href = '/' + fp.split('/').map(function(s){ return encodeURIComponent(s); }).join('/');
-                            html += '<div class="sync-item"><span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → ' +
+                            html += '<div class="sync-item">' + modeLabel + '<span class="sync-url" title="' + escapeHtml(b.url) + '">' + escapeHtml(displayUrl) + '</span> → ' +
                                 '<a href="' + href + '" class="sync-link" title="' + escapeHtml(b.localPath) + '">' + escapeHtml(fp) + '</a>' +
                                 '<button class="sync-copy-path" data-path="' + href + '" title="复制下载链接">📁</button>' +
                                 '<button class="sync-copy" data-url="' + escapeHtml(displayUrl) + '" title="复制源 URL">📋</button></div>';
@@ -671,8 +682,6 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                 var testBtn = document.getElementById('btnRegexTest');
                 if (testBtn) testBtn.onclick = function() {
                     document.getElementById('testUrl').value = '';
-                    document.getElementById('testPath').value = '';
-                    document.getElementById('testIsRegex').checked = false;
                     document.getElementById('testResults').style.display = 'none';
                     document.getElementById('regexTestModal').classList.add('active');
                 };
@@ -691,12 +700,12 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
                 });
                 var regexCheck = document.getElementById('syncIsRegex');
                 if (regexCheck) regexCheck.onchange = toggleRegexHint;
-                var intervalInput = document.getElementById('syncInterval');
-                if (intervalInput) {
-                    intervalInput.value = getSyncInterval();
-                    intervalInput.onchange = function() { setSyncInterval(parseInt(this.value) || 0); startSyncTimer(); };
-                }
-                startSyncTimer();
+                var smSelect = document.getElementById('syncMode');
+                if (smSelect) smSelect.onchange = function() {
+                    var v = this.value;
+                    document.getElementById('syncIntervalMinutes').style.display = v === 'interval' ? '' : 'none';
+                    document.getElementById('syncScheduledTime').style.display = v === 'scheduled' ? '' : 'none';
+                };
             });
         })();
     </script>
@@ -738,34 +747,34 @@ function generateDirectoryListing(currentDir, entries, baseDir, syncBindings) {
             </label>
             <span id="regexHint" style="display:none;font-size:0.8rem;color:#f59e0b">URL 可用 (\d+) 等捕获组，本地路径用 $1、$2 引用</span>
         </div>
+        <div class="form-row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:0.85rem;white-space:nowrap">同步方式：</label>
+            <select id="syncMode" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;flex:1;min-width:100px">
+                <option value="manual">手动</option>
+                <option value="interval">间隔（分钟）</option>
+                <option value="scheduled">定时（每日）</option>
+            </select>
+            <input id="syncIntervalMinutes" type="number" min="1" value="60" style="width:70px;display:none;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem">
+            <input id="syncScheduledTime" type="time" value="08:00" style="display:none;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem">
+        </div>
         <ul id="bindingList" class="binding-list"><li style="color:#94a3b8;text-align:center;justify-content:center">暂无绑定</li></ul>
         <button class="btn-sync-all">🔄 同步全部</button>
-        <div class="form-row" style="margin-top:12px;border-top:1px solid #e5e7eb;padding-top:12px">
-            <label style="white-space:nowrap;line-height:36px;font-size:0.9rem">自动同步间隔：</label>
-            <input id="syncInterval" type="number" min="0" value="0" style="width:70px">
-            <span style="line-height:36px;font-size:0.85rem;color:#6b7280">分钟（0=关闭）</span>
-        </div>
         <div style="margin-top:12px;text-align:right"><button class="btn-close">关闭</button></div>
     </div>
 </div>
 <div id="regexTestModal" class="modal-overlay">
     <div class="modal">
-        <h2>🧪 正则匹配测试</h2>
+        <h2>🧪 URL 模式测试</h2>
         <div class="form-row">
-            <input id="testUrl" type="text" placeholder="URL 模式（如 https://example.com/{date}/(\d+).json）">
-            <input id="testPath" type="text" placeholder="本地路径模式（如 data/{date}/$1.json）">
+            <input id="testUrl" type="text" placeholder="URL 模式（如 https://example.com/{date}/file.json）">
         </div>
-        <div class="form-row" style="gap:12px;align-items:center">
-            <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer">
-                <input id="testIsRegex" type="checkbox"> 正则模式
-            </label>
+        <div style="margin-top:12px;text-align:right">
             <button id="btnRunTest" class="btn-add">测试</button>
+            <button class="btn-close">关闭</button>
         </div>
         <div id="testResults" style="margin-top:12px;display:none">
-            <h3 style="font-size:0.95rem;margin:0 0 8px">匹配结果：</h3>
             <div id="testResultList"></div>
         </div>
-        <div style="margin-top:12px;text-align:right"><button class="btn-close">关闭</button></div>
     </div>
 </div>
 </body>

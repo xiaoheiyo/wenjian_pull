@@ -60,6 +60,9 @@ function resolveRegexBinding(binding, baseDir) {
     const localPathTmpl = substituteDate(binding.localPath);
     const urlTmpl = substituteDate(binding.url);
     const relPath = localPathTmpl.replace(/^\//, '');
+    if (!/\$\d+/.test(relPath)) {
+        return [{ url: urlTmpl, localPath: relPath }];
+    }
     const regex = localPathToMatchRegex(relPath);
     const parts = relPath.split('/');
     const scanParts = [];
@@ -130,6 +133,64 @@ async function syncOne(index) {
     return await syncBinding(list[index]);
 }
 
+// Auto-sync state
+const autoSyncState = { timer: null, lastSync: {} };
+
+function getTodayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function checkAndSync() {
+    const list = syncConfig.getBindings();
+    const now = Date.now();
+    const today = getTodayStr();
+    for (let i = 0; i < list.length; i++) {
+        const b = list[i];
+        const mode = b.syncMode || 'manual';
+        if (mode === 'manual') continue;
+        const key = i + '';
+        let shouldSync = false;
+        if (mode === 'interval') {
+            const interval = (b.intervalMinutes || 60) * 60000;
+            const last = autoSyncState.lastSync[key] || 0;
+            if (now - last >= interval) shouldSync = true;
+        } else if (mode === 'scheduled') {
+            const lastDate = autoSyncState.lastSync[key + '_date'] || '';
+            if (lastDate !== today) {
+                const timeStr = b.scheduledTime || '08:00';
+                const [h, m] = timeStr.split(':').map(Number);
+                const scheduleMin = h * 60 + (m || 0);
+                const currentMin = new Date().getHours() * 60 + new Date().getMinutes();
+                if (currentMin >= scheduleMin) shouldSync = true;
+            }
+        }
+        if (shouldSync) {
+            try {
+                const results = await syncBinding(b);
+                autoSyncState.lastSync[key] = Date.now();
+                if (mode === 'scheduled') autoSyncState.lastSync[key + '_date'] = today;
+                console.log(`[自动同步] 绑定 #${i}: ${results.filter(r => r.success).length} 成功, ${results.filter(r => r.error).length} 失败`);
+            } catch (e) {
+                console.error(`[自动同步] 绑定 #${i} 失败:`, e.message);
+            }
+        }
+    }
+}
+
+function startAutoSync() {
+    stopAutoSync();
+    autoSyncState.timer = setInterval(checkAndSync, 30000);
+    console.log('[自动同步] 已启动 (每30秒检查)');
+}
+
+function stopAutoSync() {
+    if (autoSyncState.timer) { clearInterval(autoSyncState.timer); autoSyncState.timer = null; }
+}
+
+// Start auto-sync when module loads
+startAutoSync();
+
 router.register('GET', '/api/sync/config', (req, res, ctx) => {
     res.writeHead(200, { ...ctx.sec, 'Content-Type': 'application/json' });
     res.end(JSON.stringify(syncConfig.getBindings()));
@@ -140,9 +201,9 @@ router.register('POST', '/api/sync/config', (req, res, ctx) => {
     req.on('data', c => body += c);
     req.on('end', () => {
         try {
-            const { url, localPath, isRegex } = JSON.parse(body);
+            const { url, localPath, isRegex, syncMode, intervalMinutes, scheduledTime } = JSON.parse(body);
             res.writeHead(200, { ...ctx.sec, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(syncConfig.addBinding(url, localPath, !!isRegex)));
+            res.end(JSON.stringify(syncConfig.addBinding(url, localPath, !!isRegex, syncMode, intervalMinutes, scheduledTime)));
         } catch (e) {
             res.writeHead(400, { ...ctx.sec, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: '请求格式错误' }));
@@ -155,9 +216,9 @@ router.register('PUT', '/api/sync/config', (req, res, ctx) => {
     req.on('data', c => body += c);
     req.on('end', () => {
         try {
-            const { index, url, localPath, isRegex } = JSON.parse(body);
+            const { index, url, localPath, isRegex, syncMode, intervalMinutes, scheduledTime } = JSON.parse(body);
             res.writeHead(200, { ...ctx.sec, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(syncConfig.updateBinding(index, url, localPath, !!isRegex)));
+            res.end(JSON.stringify(syncConfig.updateBinding(index, url, localPath, !!isRegex, syncMode, intervalMinutes, scheduledTime)));
         } catch (e) {
             res.writeHead(400, { ...ctx.sec, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: '请求格式错误' }));
@@ -209,18 +270,11 @@ router.register('POST', '/api/sync/test', (req, res, ctx) => {
     req.on('data', c => body += c);
     req.on('end', () => {
         try {
-            const { url, localPath, isRegex } = JSON.parse(body);
-            const baseDir = process.cwd();
-            const resolvedUrl = substituteDate(url);
-            const resolvedPath = substituteDate(localPath);
-            let matches = [];
-            if (isRegex) {
-                matches = resolveRegexBinding({ url, localPath, isRegex: true }, baseDir);
-            } else {
-                matches = [{ url: resolvedUrl, localPath: resolvedPath }];
-            }
+            const { url, localPath } = JSON.parse(body);
+            const resolvedUrl = substituteDate(url || '');
+            const resolvedPath = localPath ? substituteDate(localPath) : '';
             res.writeHead(200, { ...ctx.sec, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ resolvedUrl, resolvedPath, isRegex: !!isRegex, matches }));
+            res.end(JSON.stringify({ resolvedUrl, resolvedPath }));
         } catch (e) {
             res.writeHead(400, { ...ctx.sec, 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
@@ -228,4 +282,4 @@ router.register('POST', '/api/sync/test', (req, res, ctx) => {
     });
 });
 
-module.exports = { substituteDate };
+module.exports = { substituteDate, startAutoSync, stopAutoSync };

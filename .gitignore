@@ -1,4 +1,4 @@
-# dependencies
+ # dependencies
 /node_modules
 /.pnp
 .pnp.js
@@ -32,3 +32,6 @@ yarn-error.log*
 *.tsbuildinfo
 
 /plugin/logs/*
+
+# opencode
+.opencode
