@@ -25,4 +25,12 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-    - run: node server.js
+    - run: |
+          node server.js &
+          SERVER_PID=$!
+          sleep 2
+          echo "=== Testing API ==="
+          curl -s http://localhost:3300/ | head -20
+          curl -s http://localhost:3300/api/sync/config
+          echo "=== Server OK ==="
+          kill $SERVER_PID
